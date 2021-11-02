@@ -3,25 +3,47 @@
 %
 \section{Introduction}
 
-<A brief overview of your project suitable for a non-specialised audience. You may mention background and motivation, but should avoid technical terms as far as possible. 1-2 paragraphs should be sufficient. Here is an example of how to cite a reference \cite{parikh1980adaptive}.>
+Operating systems (OSes) are specialised, low level software that manages a computer's
+resources and provides a common interface for programs. The most common operating
+systems used by most consumers today include MacOS and Windows. Xv6 is an operating
+system written by MIT for the purposes of teaching [\iffalse TODO: add ref \fi].
+As it is meant to be a teaching OS, it has very barebones functionality,
+which includes a command line shell and some basic user programs by default.
 
 
 %
 % Aims, Objectives and deliverables.
 %
-\section{Aims, Objectives and Delievarables}
+\section{Aims, Objectives and Deliverables}
 
 \subsection{Project Aims}
 
-<A brief summary of the primary aims of this project. Typically 1-3 sentences.>
+The aim of this project is to implement graphics support for Xv6. This includes
+adding: basic PCIe support and driver for the graphics card, a simple interface
+for user programs to draw to the screen, and possibly a grid window manager
+to make use of Xv6's multicore CPU support.
 
 \subsection{Objectives}
 
-<A list of what you want to achieve {\em by the end of the project} -- note this means `learn how to\ldots', `research into\ldots` are {\em not} objectives, as they are intermediate milestones rather than final goals. All objectives should be measurable, {\em i.e.} it should be possible to provide evidence to confirm whether or not they have been achieved. 3-5 objectives is typical.>
+\begin{enumerate}
+    \item{Implement basic PCIe support to detect and setup the QEMU standard VGA card}
+    \item{Implement a driver for the VGA card to access registers and the framebuffer}
+    \item{Implement a library to abstract away the intricacies of drawing to the screen and provide a basic interface to set pixels and draw shape primitives}
+    \item{(optional) Implement a grid window manager so multiple graphical user applications can run simultaneously}
+\end{enumerate}
 
 \subsection{Deliverables}
 
-<A list of what you will hand in at the end of the project. This will include the final report (possibly spread across multiple deliverables, if that makes sense for your project), code (possibly more than one version), and so on. Ideally the deliverables should be cross-referenced to the objectives. 2-3 deliverables is typical, but there can be more depending on the nature of the project.>
+\begin{itemize}
+    \item{Git repository containing source code for:}
+          \begin{itemize}
+              \item{Kernel PCIe configuration}
+              \item{VGA driver}
+              \item{Simple userland graphics library}
+              \item{(optional) Grid window manager}
+          \end{itemize}
+    \item{Final Report}
+\end{itemize}
 
 
 %
