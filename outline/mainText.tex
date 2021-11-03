@@ -41,7 +41,9 @@ to make use of Xv6's multicore CPU support.
               \item{VGA driver}
               \item{Simple userland graphics library}
               \item{(optional) Grid window manager}
+              \item{Example user programs}
           \end{itemize}
+    \item{Demo video showcasing graphics implementation}
     \item{Final Report}
 \end{itemize}
 
@@ -49,23 +51,41 @@ to make use of Xv6's multicore CPU support.
 %
 % Plan
 %
-\section{Project Plan}
+\section{Project Timeline}
 
-<Provide a plan for the full project, from when you started until the submission of the final report. This should discuss the key stages of your project.>
+Below is a gantt chart which splits the project into milestones with timeframe estimates. \\
 
-\subsection{Timeline}
+\begin{ganttchart}[
+        vgrid,
+        x unit=0.4cm,
+        milestone label font=\tiny,
+        title label font=\tiny,
+    ]{1}{30}
+    \gantttitle{2021}{11}
+    \gantttitle{2022}{19} \\
+    \gantttitlelist{1,...,30}{1} \\
+    \ganttgroup{Planning}{1}{8} \\
+    \ganttgroup{Code Implementation}{8}{22} \\
+    \ganttgroup{Report Finalisation}{22}{30} \\
 
-<A graphical description of your plan, often as a Gantt chart.>
+    \ganttbar {Project Outline}{1}{6} \\
+    \ganttbar {Preliminary Research}{4}{8} \\
+    \ganttbar {Prototyping}{6}{8} \\
 
-% To include a figure, uncomment and modify the following. Vary the 'width'
-% field until it looks suitable. This uses the 'graphicx' module that has
-% already been included in 'config.tex'.
-%\begin{figure}[htbp]	
-%	\centerline{
-%		\includegraphics[width=12cm]{<Filename>}
-%	}
-%	\caption{<Caption text>}
-%\end{figure}
+    \ganttbar {Intermediate Report}{8}{11} \\
+    
+    \ganttbar {PCIe Config}{8}{10} \\
+    \ganttlinkedbar {VGA I/O}{10}{12} \\
+    \ganttlinkedbar {VGA Config}{12}{14} \\
+    \ganttlinkedbar {User Graphics Lib}{14}{18} \\
+    \ganttlinkedbar {Example Programs}{18}{21}
+    \ganttbar {}{24}{26} \\
+    \ganttbar {Grid Window Manager}{21}{24} \\
+    \ganttlink{elem11}{elem13}
+    \ganttlink{elem13}{elem12}
+
+    \ganttbar {Final Report}{14}{30} \\
+\end{ganttchart}
 
 
 
@@ -74,7 +94,11 @@ to make use of Xv6's multicore CPU support.
 %
 \section{Risk Mitigation}
 
-<Identify risks to your project, and what you would do if they arose.>
+Risks for this project are minor. Unexpected delays when implementing some of the
+planned features are the only real risk, which is managed by splitting the project
+into milestones with liberal estimates on the timeframes. If an issue arises that
+severely impacts the time needed to complete the project, certain features can be
+excluded such as the grid layout window manager.
 
 
 %
@@ -82,4 +106,4 @@ to make use of Xv6's multicore CPU support.
 %
 \section{Ethics}
 
-<If your project has ethical issues (e.g. gathering of user consent forms), then you should state here how you intend to address them. If there are no ethical issues then explicitly state: "There are no ethical issues for this project.">
+There are no ethical issues for this project
