@@ -29,6 +29,23 @@ to make use of Xv6's multicore CPU support.
     \item{Implement basic PCIe support to detect and setup the QEMU standard VGA card}
     \item{Implement a driver for the VGA card to access registers and the framebuffer}
     \item{Implement a library to abstract away the intricacies of drawing to the screen and provide a basic interface to set pixels and draw shape primitives}
+          \begin{enumerate}
+              \item This is the bulk of the project, and many design decisions will have to be made
+                    \begin{enumerate}
+                        \item The main example is deciding whether or not the majority of the library will exist in userspace or kernelspace.
+
+                              This will affect many things in development. Developing it in kernelspace will be easier as
+                              there will be direct access to the framebuffer, but would result in a higher security risk
+                              as any bugs and mistakes would have access to the kernel memory space. There would also be a
+                              significantly large increase in system calls
+                        \item Planning will be required for 'futureproofing' the library. For example there is an extended objective
+                              to implement a window manager. Careful decisions will be required to ensure the graphics library can
+                              interface easily with the windows.
+                    \end{enumerate}
+              \item Basic functionality like drawing shape primitive and applying simple 2D transformations
+                    should be implemented. To support this, a maths utility library for dealing with the
+                    graphics calculations should probably be implemented
+          \end{enumerate}
     \item{(optional) Implement a grid window manager so multiple graphical user applications can run simultaneously}
 \end{enumerate}
 
@@ -39,7 +56,7 @@ to make use of Xv6's multicore CPU support.
           \begin{itemize}
               \item{Kernel PCIe configuration}
               \item{VGA driver}
-              \item{Simple userland graphics library}
+              \item{Graphics library}
               \item{(optional) Grid window manager}
               \item{Example user programs}
           \end{itemize}
@@ -51,6 +68,7 @@ to make use of Xv6's multicore CPU support.
 %
 % Plan
 %
+\pagebreak
 \section{Project Timeline}
 
 Below is a gantt chart which splits the project into milestones with timeframe estimates. \\
@@ -73,7 +91,7 @@ Below is a gantt chart which splits the project into milestones with timeframe e
     \ganttbar {Prototyping}{6}{8} \\
 
     \ganttbar {Intermediate Report}{8}{11} \\
-    
+
     \ganttbar {PCIe Config}{8}{10} \\
     \ganttlinkedbar {VGA I/O}{10}{12} \\
     \ganttlinkedbar {VGA Config}{12}{14} \\
@@ -86,7 +104,7 @@ Below is a gantt chart which splits the project into milestones with timeframe e
 
     \ganttbar {Final Report}{14}{30} \\
 \end{ganttchart}
-
+\pagebreak
 
 
 %
@@ -100,10 +118,31 @@ into milestones with liberal estimates on the timeframes. If an issue arises tha
 severely impacts the time needed to complete the project, certain features can be
 excluded such as the grid layout window manager.
 
+For a better solution, the graphics library should be implemented in userspace.
+This however increases the complexity of the project, so extra attention to time
+will be required. If a feature takes too long, it will either be simplified or dropped.
+If it is a critical feature, other planned less essential features will be simplified or
+removed.
 
 %
 % Ethics.
 %
-\section{Ethics}
+\section{Legal \& Ethical issues}
 
-There are no ethical issues for this project
+Xv6 is made open source with the MIT License, which states any person may
+\begin{quote}
+    "..use, copy, \textbf{modify}, merge, publish,
+    distribute, sublicense, and/or sell copies of the Software..."
+\end{quote}
+free of charge, given that the full license text and copyright notice
+is provided.
+
+As the software is being modified, to comply with the provided license the
+original copyright and license will be included in the modified software.
+Additionally, there are no references to the original authors' rights to intellectual
+property of Xv6 derivatives, so the project - which are original modifications
+made to Xv6 - will belong to the author (myself) and should be fine for submission.
+% TODOS:
+
+% license
+% copyright & IP
