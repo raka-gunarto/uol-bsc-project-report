@@ -1,13 +1,592 @@
 \chapter{Methods}
 \label{chapter2}
 
-<Everything that comes under the `Methods' criterion in the mark scheme should be described in one, or possibly more than one, chapter(s).>
+\section{Development plan}
+\subsection{Model}
+The waterfall model will be used following the linear nature of the project. 
+Features in the planned software are linearly dependent, and following this model
+will allow consistent progress to reach the planned objectives and deliverables.
 
-\section{A section}
-\lipsum[5]
+\subsection{Version control}
+As Xv6 is already in a git repository hosted on GitHub \cite{xv6:code}, 
+we can simply fork the repository for our modifications. Using git will allow
+the progress of the software implementation to be easily documented.
 
-\subsection{A sub-section}
-\lipsum[6]
+\section{Analysis and design}
 
-\section{Another section}
-\lipsum[7]
+\subsection{Running Xv6}
+There are two options of running Xv6. This subsection will explore the pros
+and cons of both options in this project's use case.
+The usual choice is to use QEMU, an emulator that can run systems built for the RISC-V architecture. 
+
+\subsubsection*{Pros}
+\begin{itemize}
+    \item Xv6 built with QEMU in mind
+    \item Extensive debugging capabilities
+    \item Easy graphics card and display emulation
+    \item Easy to install from the Ubuntu software repositories
+\end{itemize}
+\subsubsection*{Cons}
+\begin{itemize}
+    \item Not very performant
+\end{itemize}
+
+The alternative option is to run it on bare metal. As there aren't many 
+RISC-V processors, the options are limited, with one of the only options being
+the `HiFive Unmatched' board by SiFive \cite{hifiveunmatched}.
+
+\subsubsection*{Pros}
+\begin{itemize}
+    \item Dedicated RISC-V processor, very performant
+    \item Ability to observe the solution on real hardware
+\end{itemize}
+\subsubsection*{Cons}
+\begin{itemize}
+    \item Expensive, costs USD 665
+    \item Would require additional hardware for this project, adding to the already expensive cost of the board
+    \begin{itemize}
+        \item VGA compatible graphics card
+        \item JTAG interface hardware for debugging
+    \end{itemize}
+    \item Modifications in Xv6 required as some memory addresses are hardcoded for the emulated QEMU `virt' board
+\end{itemize}
+
+
+Given all this, running Xv6 in QEMU is the best option as it will suffice for 
+development and testing of a graphics implementation.
+
+\subsection{QEMU VGA emulation}
+There are many emulation options for graphics provided by QEMU \cite{qemucards}. 
+We will choose the most basic VGA card that we can access through PCI communication.
+This card provides full VGA compatibility which can be configured through its data
+ports (using the memory mapped PCI port IO addresses), and a linear framebuffer exposed
+as memory mapped IO which can be mapped anywhere in the PCI MMIO region of the virtual
+address space.
+
+\subsection{Solution diagram}
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=16cm]{diagram.drawio.png}
+    \caption{Solution design diagram}
+    \label{figure:3}
+\end{figure}
+
+The design diagram in figure \ref{figure:3} illustrates how the different parts
+of the solution will communicate and interact with each other. In short, the PCI
+discovery code will find the VGA card and configure the base addresses, then signal
+the driver when the VGA device is ready. 
+
+The VGA driver will provide an interface to the framebuffer and some modesetting code, through the port IO and memory IO which
+have address mappings in the virtual address space. The window manager will then use
+the framebuffer exposed by the driver to process user code that draws to the screen,
+and register UART interrupts as input events to be passed back to user code.
+
+\section{Implementation}
+
+\subsection{Xv6 build modifications}
+A Makefile is provided with the Xv6 project that contains tasks that builds the
+kernel, user programs, and the filesystem. It also has tasks that runs the compiled
+kernel and filesystem image on QEMU.
+
+\subsubsection{QEMU options}
+There is a variable called \mintinline{c}{QEMUOPTS} in the Makefile that contains
+command line options forwarded to QEMU. We need to add the following line
+\begin{minted}{Makefile}
+    QEMUOPTS += -device VGA -vnc :0
+\end{minted}
+to enable the VGA device emulation and serve the display output via VNC. We will also
+modify the C compiler flags to include \mintinline{bash}{-O0} to disable all optimisations
+during development which could otherwise interfere with debugging.
+
+When creating new files to be compiled into the kernel 
+(Chapters \ref{chapter2:impl:pci},\ref{chapter2:impl:driver},\ref{chapter2:impl:winman}),
+the appropriate compile targets must be appended to the \mintinline{c}{OBJS} variable. Similarly
+for user programs, shared code must be appended to \mintinline{c}{ULIB}, and the programs appended
+to \mintinline{c}{UPROGS}.
+
+\subsection{Xv6 memory mapping}
+\label{chapter2:impl:memory}
+As mentioned earlier in Chapter \ref{chapter1:research:hardware}, the memory addresses for
+PCI communication will need to be configured in Xv6. Using the mappings found in the
+QEMU source tree in Listing \ref{listing:1}, we can add the following lines into the kernel
+pagetable in kernel/vm.c (see Appendix \ref{appendix:c:2} for address definitions).
+\begin{minted}[breaklines]{c}
+  // map PCI ECAM space
+  kvmmap(kpgtbl, PCI_ECAM_BASE, PCI_ECAM_BASE, PCI_ECAM_LEN, PTE_R | PTE_W);
+
+  // map PCI PIO
+  kvmmap(kpgtbl, PCI_PIO_BASE, PCI_PIO_BASE, PCI_PIO_LEN, PTE_R | PTE_W);
+
+  // map VGA framebuffer (PCI MMIO)
+  kvmmap(kpgtbl, VGA_FRAMEBUFFER_BASE, VGA_FRAMEBUFFER_BASE, VGA_FRAMEBUFFER_SIZE, PTE_R | PTE_W);
+\end{minted}
+These will configure direct mappings for these addresses for kernel read and write access only, denying execution
+or unprivileged access. The kernel is now ready to communicate with the emulated PCI VGA device.
+\subsection{PCI communication}
+\label{chapter2:impl:pci}
+\subsubsection{VGA device discovery}
+As shown in figure \ref{figure:1}, the PCI configuration space is a table of PCI configuration headers
+where the first 32 bits contain the vendor and device IDs. As documented in the QEMU source tree under
+/docs/specs/standard-vga.txt \cite{qemusource}, the ID for the emulated VGA card is 0x11111234.
+
+A simple bruteforce scan through the configuration space, through all 256 PCI buses with 32 devices
+per bus, we can compare the first 32 bits of the header with 0x11111234 (see Appendix \ref{appendix:c:3}).
+
+\subsubsection{VGA configuration}
+Once the device has been found, we need to write data into the configuration header to achieve the following:
+\begin{itemize}
+    \item Enable device to respond to port I/O space access, to configure VGA modes and functionality
+    \item Enable device to respond to memory space access, for framebuffer access
+    \item Configure base address in PCI MMIO address space to expose the framebuffer
+\end{itemize}
+This can be achieved by the following code snippet, given that `header' is an unsigned 32 bit
+pointer to memory.
+\begin{minted}{c}
+  //-- set bits in the command register
+  // Bit 0 - respond to I/O accesses
+  // Bit 1 - respond the memory accesses
+  // Bit 2 - enable bus mastering (allow card to access other components without CPU intervention)
+  header[1] = 0b111;
+
+  __sync_synchronize(); // ensure order of writes aren't modified by optimisation
+
+  // map the framebuffer in our specified base addr
+  header[4] = VGA_FRAMEBUFFER_BASE;
+\end{minted}
+
+\subsection{VGA graphics driver}
+\label{chapter2:impl:driver}
+\subsubsection{VGA register access through PCI PIO}
+VGA hardware is configured through many 8 bit registers, but the hardware only occupies
+a very short port I/O range \cite{osdevvga}. Access is done through indexing, where a register
+index is written to a port, then data is written/read for the same or adjacent port. On cases
+where data is fed into the same port as the index, an access operation on a specified ``mode setting'' port
+will set the port into index mode.
+
+We can see this functionality in the code snippet in listing \ref{listing:2}. The function
+handles writing to the VGA registers using ports and register indexes, handling the special cases
+mentioned earlier. The read function is also identical, but instead of writing to 
+`vga\_pio', the contents of the register index at the given data port offset is returned. Note
+that the order of reads and writes are very important here, so we use \mintinline{c}{__sync_synchrnize()}
+to emit a memory fence instruction so the compiler and the CPU do not attempt to change the order
+of accesses. The \mintinline{c}{__attibute__((unused))} modifier also informs the compiler that
+it should not optimise away that variable even though it seems unused, as we need it to perform
+a read operation on port 0x3DA to set port 0x3C0 into index mode.
+
+\begin{listing}[H]
+    \begin{minted}{c}
+static volatile uint8 idx_mode_set __attribute__((unused));
+static volatile uint8 *vga_pio = (uint8 *)PCI_PIO_BASE;
+static void pwrite(uint32 port, uint32 idx, uint8 val)
+{
+  if (idx == 0xFF)
+  {
+    // special case, this port doesn't use indices
+    // direct write
+    vga_pio[port] = val;
+    return;
+  }
+
+  // perform a read op on 0x3DA to set 0x3C0 into index mode
+  idx_mode_set = vga_pio[0x3DA];
+  __sync_synchronize();
+
+  // write the index to the port, and the value to port + 1 if not special case 0x3C0
+  vga_pio[port] = idx;
+  __sync_synchronize();
+  uint write_offset = (port == 0x3C0) ? (uint32)0 : (uint32)1;
+  vga_pio[port + write_offset] = val;
+  __sync_synchronize();
+
+  // perform a read op on 0x3DA to set 0x3C0 into index mode after
+  idx_mode_set = vga_pio[0x3DA];
+}
+    \end{minted}
+    \caption{kernel/pci.c, VGA port write code}
+    \label{listing:2}
+\end{listing}
+\subsubsection{Modesetting}
+VGA hardware modes are configured by setting various registers, to configure the timing and resolution
+of the output, as well as the colour depth and structure (planar or linear) of the framebuffer.
+In non text modes, a palette will also need to be configured for the target colour depth.
+
+For the scope of this project, support for only one mode will be implemented, 320x200 linear 256 colour 
+(see Appendix \ref{appendix:c:4} for modesetting value examples).
+This mode configures the framebuffer for linear access, with 8 bit (256) colours. This will
+also make one pixel equal to one byte, simplifying framebuffer manipulation further in addition to linear access.
+
+Setting the mode can be done by writing the appropriate values to the ports (see kernel/vga.h in the project codebase)
+using the port writing logic written in listing \ref{listing:2}.
+
+We will be using the standard VGA 256 colour palette (figure \ref{figure:vgacolor}) for
+our implementation. The VGA DAC has a colour subsystem that uses an 18 bit colour
+space, 6 bits for each RGB component. We can store this data as a constant in a 32 bit
+type array, storing each component in 8 bits (one byte), using only the first 6 bits in each byte.
+Writing to the DAC is done in sets of 3, where each component is fed into the DAC data register
+sequentially (see listing \ref{listing:palette}).
+
+\begin{figure}
+    \centering
+    \includegraphics[width=8cm]{1024px-VGA_palette_with_black_borders.png}
+    \caption{VGA 256 colour palette}
+    \label{figure:vgacolor}
+\end{figure}
+\begin{listing}
+    \begin{minted}{c}
+    pwrite(0x3c8, 0xff, 0x00); // set DAC colour register mode to write
+    for (int i = 0; i < 256; i++)
+    {
+      // take 6 bits from relevant part of palette, shift to uint8 type, and write to reg
+      // it is 6 bits because the DAC uses an 18 bit colour space, 6 bits per colour component
+      pwrite(0x3c9, 0xff, (VGA_256COL_PALETTE[i] & 0xfc0000) >> 18); // set red val
+      pwrite(0x3c9, 0xff, (VGA_256COL_PALETTE[i] & 0x00fc00) >> 10); // set green val
+      pwrite(0x3c9, 0xff, (VGA_256COL_PALETTE[i] & 0x0000fc) >> 2);  // set blue val
+    }
+    \end{minted}
+    \caption{kernel/vga.c, setting the VGA palette (see listing \ref{listing:2} for pwrite implementation)}
+    \label{listing:palette}
+\end{listing}
+
+\subsubsection{Boot image}
+During system boot, many operating systems display a boot image while it finishes its
+boot sequence. Taking inspiration from Linux, the driver will display a boot image, repeated
+for every CPU in the system. As each CPU core knows its own CPU number, 
+calculating this is trivial, since the width of the screen
+and the boot image is known (see Appendix \ref{appendix:c:5}).
+
+\subsection{Grid window manager}
+\label{chapter2:impl:winman}
+
+\subsubsection{Device file handling}
+As briefly mentioned in Chapter \ref{chapter1:research:winman}, we will be using device files
+for programs in userspace to communicate with the window manager. Modifications will need to be
+made to file IO handling to register our new device file type (major number) and its handlers
+for read/write operations.
+
+Device files are special files that have a major and minor number. For our case,
+the major number will indicate that its a `WINDOW' device file with major number 2, with 
+the minor number specifying which window the file is referring to. There already
+exists another type of device file `CONSOLE' in xv6 with major number 1; this file serves as an
+abstraction to reading and writing from the UART console. Similarly for the
+window manager, the new device file will be an abstraction for drawing to a window
+and reading the window's input events. Using this design pattern saves us from having
+to add more system calls to xv6 as well.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=5cm]{fio.drawio.png}
+    \caption{Filesystem reads/writes to device files}
+\end{figure}
+
+Registering the function handlers to `devsw' is very simple, the addresses for
+the read and write handlers are set on
+\mintinline{c}{devsw[MAJOR].read} and 
+\mintinline{c}{devsw[MAJOR].write} respectively.
+
+Xv6 currently does not pass on the \mintinline{c}{struct file*} pointer.
+The function handler signature is \mintinline{c}{(int, uint64, int)}, but we need
+details such as the minor number to describe which window and 
+the file offset to determine where in the window we start copying data to. We can
+simply add the argument for the pointer and modify all the function handlers to 
+also expect that argument.
+
+As each window should only be allocated to one program at a time, we can check the
+reference count to a device file as it is being opened, and deny access if it already
+has an existing reference (another program is using the window).
+Since the grid layout also cannot be changed at runtime in the current implementation,
+returning the size of the window, the size of the `file' can also be set during opening.
+(see listing \ref{listing:winopen})
+
+Note that the function \mintinline{c}{windowman_getsize()} applies some bit tricks
+to fit the width and the height into the uint64 type of the file's size. This is done
+as the user might find it useful to know the dimensions rather than just the
+number of pixels in the window.
+
+\begin{listing}
+    \begin{minted}{c}
+  if (ip->type == T_DEVICE && ip->major == WINDOW) {
+    if (ip->ref > 1) { // only one access per window
+      iunlockput(ip);
+      end_op();
+      return -1;
+    }
+
+    ip->size = windowman_getsize();
+  }
+    \end{minted}
+    \caption{Additional checks when opening a window device file}
+    \label{listing:winopen}
+\end{listing}
+
+\subsubsection{Hooking UART interrupts}
+Xv6's only source of input is currently UART. Usually human interaction with
+a system is done through keyboard and mouse input, but Xv6 does not support that
+and it would be out of scope to implement drivers for those devices. QEMU already
+forwards keyboard inputs from the host system as UART inputs, so we will be using
+UART as our input.
+
+Currently the console also uses UART for its input as well, as characters are
+forwarded to `consoleintr' as they are received in UART (see listing \ref{listing:uartchain}).
+We can simply add our window manager handler `windowmanintr' to the chain to also
+listen to this input. Note that sometimes we want to `consume' the character 
+(not forward it to other listeners), i.e when a window is active the console
+should not also receive the input. To achieve this we insert our handler before
+the console handler, and check its return value to see if it should call the next
+handler in the chain.
+
+\begin{listing}
+    \begin{minted}{c}
+void
+uartintr(void)
+{
+  // read and process incoming characters.
+  while(1){
+    int c = uartgetc();
+    if(c == -1)
+      break;
+    if (windowmanintr(c) != 0)
+      consoleintr(c);
+  }
+
+  // send buffered characters.
+  acquire(&uart_tx_lock);
+  uartstart();
+  release(&uart_tx_lock);
+}
+
+    \end{minted}
+    \caption{kernel/uart.c, UART interrupt chain}
+    \label{listing:uartchain}
+\end{listing}
+
+\subsubsection{Window switching}
+A mechanism for cycling between the windows to determine which window is active
+(if any) is required for multiple reasons. The main use would be to determine
+which window's event queue normal UART input is appended to, and to provide
+graphical feedback to the user to indicate the active window (see Appendix
+\ref{appendix:c:6} for window border drawing code). We also need a
+state of no window being active as UART input is also being shared with the console,
+and when no window is active the input should be forwarded to the console instead.
+
+As there is no mouse input, hotkeys (UART control characters) 
+will be used to cycle between the windows. We can use Control+T to cycle
+through a static global in the window manager to keep track of which window
+is active (see Appendix \ref{appendix:c:6}). 
+
+\subsubsection{Input event queue}
+\label{chapter2:impl:winman:evtq}
+Similar to how the console has an input buffer, each window will have an event
+queue. Each UART character will count as a seperate input. The data structure
+for a window event is as follows:
+\begin{minted}[]{c}
+struct windowevent {
+    enum {EVT_KEY, HEAD, TAIL} type;
+    uint64 payload;
+};
+\end{minted}
+The rationale behind having a data structure and a queue is to support other
+types of events in the future from other human interface devices, such as a mouse.
+Furthermore, the queue will be implemented as a circular queue, to be more space
+efficient and reducing the need to shift memory around as events are queued / dequeued.
+Since the kernel also doesn not have a dynamic memory allocator, the size of the event
+queue for each window will also be fixed.
+
+\subsubsection{Device read and write functions}
+When reading from the window device file, the window manager will instead return
+window events from the event queue (see Chapter \ref{chapter2:impl:winman:evtq}) up
+to the number requested by the read call. The tail of the event queue will also
+be moved as events are dequeued, to make space for new events (see Appendix \ref{appendix:c:7} for code implementation).
+
+When writing to the window device file, user data is copied to the framebuffer sequentially,
+from the file offset specified. Since we are copying user data of a variable length,
+precautions are needed to defend against potential attacks such as buffer overflows.
+In addition to that, checks will need to be implemented to also ensure the write call
+is not overflowing their own allocated window, which can potentially draw over
+other windows. A single check can address both issues:
+
+\begin{minted}{c}
+    // check out of bounds
+    const int width = vga_getwidth();
+    const int height = vga_getheight();
+    if (f->off + n > (width / COLUMNS) * (height / ROWS))
+        return -1;
+\end{minted}
+
+After the checks are done, data is copied into the window row by row with
+\mintinline{c}{either_copyin()}, an existing function that can take a pointer
+from a userspace program and copy data from its memory to kernel memory.
+
+\begin{minted}{c}
+    while (bytes_left > 0)
+    {
+        // check bytes left will overflow this row
+        if (bytes_left + current_x >= (width / COLUMNS))
+        {
+            either_copyin(
+                framebuffer + (xoffset + current_x) + (yoffset + current_y) * width,
+                user_src,
+                addr,
+                (width / COLUMNS) - current_x);
+            bytes_left -= (width / COLUMNS) - current_x;
+            current_x = 0;
+            current_y++;
+            continue;
+        }
+
+        // fits in this row
+        either_copyin(
+            framebuffer + (xoffset + current_x) + (yoffset + current_y) * width,
+            user_src,
+            addr,
+            bytes_left);
+        bytes_left = 0;
+    }
+\end{minted}
+
+\subsection{User mode graphics library}
+\label{chapter2:impl:usrlib}
+
+The window manager only offers a very raw and crude way to draw to the window.
+Drawing can only be done on contiguous linear blocks of pixels at a variable offset.
+To address this, we can write a graphics library in usermode to provide some 
+abstractions such as text rendering, drawing rectangles, rectangular sprites, etc.
+
+Creating an abstraction layer that is designed around the functionality of a window
+will also be useful for future purposes if the underlying implementation details were to
+change. 
+
+\subsubsection{Automatic window allocation and destruction}
+Since a window can only be accessed at one program at a time, the process of finding
+a free window can be tedious and will most likely be repeated for all user programs.
+
+We can abstract this logic into a \mintinline{c}{window_create()} function that
+returns a handle to the window. The function will find all device files in the
+root directory that starts with `window'. If one opens successfully, a data structure
+defined internally in the library is created containing the file descriptor
+and the dimensions, and returned to the user in the form of a opaque pointer
+(pointer to forward declared struct).
+We don't want users of the library to directly access this structure in case
+the implementation changes, therefore we expose it as an opqaue pointer
+for internal use only.
+
+A complementary \mintinline{c}{window_destroy()} is also written that clears
+the window, closes the underlying file descriptor, and frees the handle (struct pointer).
+
+This structure takes inspiration from the `CreateWindow()' and `DestroyWindow()' 
+Windows API pattern \cite{windowsapi:window}.
+
+\subsubsection{Event polling}
+Our window manager makes event polling very simple, just perform a read syscall
+with the window device file descriptor with the desired maximum events to read.
+However since the provided window handle is an opaque type, the library will provide
+a \mintinline{c}{window_pollevent()} with a function signature identical to the read syscall,
+with the exception of the first argument taking the window handle instead of an integer 
+descriptor. The function will forward the arguments to the read systemcall and return
+the number of events read. 
+
+Using this method not only conforms to the design pattern of the library, but
+has the added benefit of clearer self-documenting code instead of an ambiguous
+read call to the window descriptor.
+
+\subsubsection{Text rendering}
+The 8x16 font is stored in kernel/font.h where each glyph is encoded in rows where 
+each row is a byte and a bit value of 1 indicates foreground and 0 indicates background.
+
+\begin{listing}[h]
+    \begin{minted}{c}
+void window_drawchar(window_handle win, uint x, uint y, char c, uint8 color)
+{
+    int mask[8] = {128, 64, 32, 16, 8, 4, 2, 1};
+    uint8 *glyph = VGA_8x16_FONT + (int)c * 16;
+
+    for (int j = 0; j < 16; j++)
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            if (x + i >= win->width || y + j >= win->height)
+                continue;
+            
+            if (glyph[j] & mask[i])
+            {
+                seek(win->fd, SEEK_SET, (y + j) * win->width + x + i);
+                write(win->fd, &color, 1);
+            }
+        }
+    }
+
+    // reset cursor
+    seek(win->fd, SEEK_SET, 0);
+}
+    \end{minted}
+    \caption{user/uwindow.c, character rendering logic}
+    \label{listing:charrender}
+\end{listing}
+
+As shown in listing \ref{listing:charrender}, character rendering is actually 
+quite trivial. Given a character `c', we get the offset in the ASCII font, and
+then decode the glyphs. The mask is applied for every pixel as each 8 bits
+is actually an encoded row. The foreground pixels are then written to the screen
+with the specified colour and coordinate offset.
+
+Note that this implementation is potentially slow since worst case it may result in 
+8 * 16 * 2 system calls.
+
+\subsubsection{Shape rendering}
+The ability to draw shape primitives is essential to creating a basic graphical interface.
+We will implement functionality to draw rectangles, circles and lines.
+
+Drawing rectangles is simple, we simply draw 
+
+\subsubsection{Sprite rendering}
+Rendering rectangular sprites is identical to rendering rectangles, but instead
+of using a solid colour we use the sprite data for the colours.
+
+\section{Scheduler modifications}
+Processes that are drawing graphics should be prioritised as to appear more
+responsive for the user experience. The current scheduler is a round robin 
+scheduler that may make graphical applications appear less responsive if there are a
+lot of background processes running.
+
+To address this, a simple priority scheduler will be implemented. Each process will
+have a priority flag, and the new scheduler algorithm will run priority processes
+first also in a round robin fashion, otherwise it will run the first available
+process also with round robin.
+
+Small modifications to kernel/proc.h will be required to support priority processes.
+Specifically, the priority needs to be added to the processes data structure and a
+process state enum of `RESERVED' will also be needed.
+
+\noindent The new algorithm will be as follows (see Appendix \ref{appendix:c:8} for code):
+\begin{enumerate}
+    \item Is the current process a priority process? Go to 6 if yes.
+    \item Is the current process a runnable process? Save the process as a reserve if yes.
+    \item Go to the next process
+    \item Have we reached our starting point since last run? Set the reserve process (if exists) and go to 6.
+    \item Go back to 1.
+    \item Run process.
+    \item Go to the next process.
+    \item Go back to 1.
+\end{enumerate}
+
+Finally, a new system call will need to be added to set the running process' 
+priority. This is very simple to do, as the new syscall will only need to set
+the \mintinline{c}{p->priority} value to the first argument of the call. See
+Appendix \ref{appendix:c:8} for the detailed modifications.
+
+\section{Version control}
+Illustrated in the commit graph (figure \ref{figure:commitgraph}), proper version control
+with a defined workflow was used. `Feature' branches contain work on mostly isolated
+features, the `develop' branch contains work from multiple feature branches, and 
+finally the `master' branch has merges from `develop' when the build is stable.
+
+Although this workflow is more suited towards projects where features can be developed
+concurrently with potentially multiple team members, it provides a nice structure
+to the commit history. Commits that contribute to a feature can be easily grouped,
+and there is a dedicated branch for stable builds.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=12cm]{Screenshot from 2022-04-27 12-47-49.png}
+    \caption{Git commit graph}
+    \label{figure:commitgraph}
+\end{figure}
