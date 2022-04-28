@@ -2,8 +2,58 @@
 \label{chapter4}
 
 \section{Conclusions}
-\lipsum[13]
-
+The objective of the project, implementing graphics for the Xv6 operating system,
+has been achieved to a satisfactory level. The solution implementation is 
+able to communicate with a VGA compatible PCI hardware, set it up properly for graphics,
+and expose the display in the form of a grid of windows to user programs. Furthermore, a 
+graphics library that further abstracts the intricacies of allocating a window
+and drawing graphics was developed, creating a simple interface for user program
+development.
 \section{Ideas for future work}
-\lipsum[14]
+Although satisfactory, some aspects of the project can be developed further.
+\subsection{Portability}
+While the code is mostly portable, some parts were hardcoded to stick to the project
+timeframe and to stay within the project scope. 
+
+Addresses for communication with PCI devices were hardcoded to only support the
+QEMU 'virt' emulated board. These addresses may be different on other systems,
+and the proper implementation should be to read the device tree blob placed
+in memory to retrieve the addresses.
+
+The VGA framebuffer is exposed at a constant location in the PCI MMIO address space.
+This may cause conflicts if there are other PCI devices also using the PCI MMIO.
+The PCI code can be improved to keep track of used address spaces and allocate the
+base addresses dynamically.
+
+The legacy PCI access method is also being used, which may limit discovery of PCI
+hardware.
+\subsection{Further VGA support}
+Currently only a limited subset of VGA features are implemented. The driver only
+supports a single mode, mode 13h, which is a 320x200 resolution 256 colour mode.
+The implementation could be further improved to implement other modes, or even
+the extended standards such as SVGA for larger resolutions and a larger colour
+space.
+
+The VGA driver is also very primitive, it only supports copying memory into the framebuffer.
+`Bit blitting' operations could be implemented in the future, where the source data 
+and the framebuffer is combined through bitwise operations. This could greatly optimise
+draw operations for non rectangular shapes, as the buffer could still be rectangular
+but pixels can be left unaffected.
+
+\subsection{Human interfacing}
+Although slightly out of scope, more human interfacing options could be provided. This
+could be done by adding USB support for mice, keyboard, gamepads, etc. A mouse cursor
+could also be implemented in the future. 
+
+\subsection{Advanced graphics library}
+The current implementation for the graphics library is not ideal for high framerate
+applications. Double buffering could be implemented to only update the real window 
+framebuffer when it is ready to be displayed, reducing flickering or other
+graphical artifacts and anomalies.
+
+More utilities could also be included, such as drawing triangle primitives and 
+maybe 2D space transformations. This was planned to be included in the project,
+but unfortunately there were some issues in QEMU with floating point operations,
+resulting in the functionality being removed.
+
 

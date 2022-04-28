@@ -535,11 +535,77 @@ Note that this implementation is potentially slow since worst case it may result
 The ability to draw shape primitives is essential to creating a basic graphical interface.
 We will implement functionality to draw rectangles, circles and lines.
 
-Drawing rectangles is simple, we simply draw 
+Drawing rectangles is simple, we simply use seek to draw the rectangle
+row by row, ensuring we don't overflow the current row.
+
+\begin{minted}{c}
+    uint8 *rowbuf = malloc(sizeof(uint8) * width);
+    for (int j = 0; j < height; ++j)
+    {
+        // copy color into rowbuf and write
+        memset(rowbuf, color, width);
+        seek(win->fd, SEEK_SET, ((y + j) * win->width) + x);
+        write(win->fd, rowbuf, width);
+    }
+\end{minted}
+
+Drawing circles is also quite simple, although not as performant. Each pixel
+in the square bounding box of the circle is checked against the distance
+from the specified centre coodinate, and drawn if within the circle radius. 
+
+\begin{minted}{c}
+    uint rsquared = r * r;
+    for (uint j = y - r; j < y + r && j < win->height; ++j)
+        for (uint i = x - r; i < x + r && i < win->width; ++i)
+        {
+            uint dx = x - i;
+            uint dy = y - j;
+            uint distsquared = dx * dx + dy * dy;
+
+            if (distsquared <= rsquared)
+            {
+                seek(win->fd, SEEK_SET, j * win->width + i);
+                write(win->fd, &color, 1);
+            }
+        }
+\end{minted}
+
+Drawing lines is a slightly more complicated process, involving interpolating
+pixels between the two specified points. This requires floating point operations
+as the interval between steps is fractional. It is also not very performant as
+we draw each pixel individually.
+
+\begin{minted}{c}
+    int steps = (abs(y1 - y2) + abs(x1 - x2));
+    float interval = (float)1 / steps;
+
+    float t = 0;
+    for (int i = 0; i < steps; i++, t += interval)
+    {
+        // this is really slow, kernel doesn't support masking / blitting
+        // yet so if we don't want to overwrite a rectangular region this is
+        // the only way for now
+        seek(win->fd, SEEK_SET, interpolate(y1, y2, t) * win->width + interpolate(x1, x2, t));
+        write(win->fd, &color, 1);
+    }
+\end{minted}
 
 \subsubsection{Sprite rendering}
 Rendering rectangular sprites is identical to rendering rectangles, but instead
 of using a solid colour we use the sprite data for the colours.
+
+\begin{minted}{c}
+    uint8 *rowbuf = malloc(sizeof(uint8) * width);
+    for (int j = 0; j < height; ++j)
+    {
+        // copy sprite bytes into rowbuf
+        memmove(rowbuf, data + (j * w), width);
+
+        // write to screen
+        seek(win->fd, SEEK_SET, ((y + j) * win->width) + x);
+        write(win->fd, rowbuf, width);
+    }
+\end{minted}
 
 \section{Scheduler modifications}
 Processes that are drawing graphics should be prioritised as to appear more

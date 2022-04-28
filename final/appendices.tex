@@ -5,11 +5,38 @@
 %
 \chapter{Self-appraisal}
 
-<This appendix should contain everything covered by the 'self-appraisal' criterion in the mark scheme. Although there is no length limit for this section, 2---4 pages will normally be sufficient. The format of this section is not prescribed, but you may like to organise your discussion into the following sections and subsections.>
-
 \section{Critical self-evaluation}
+The development of this project was done well, with all the intended objectives reached
+(and arguably, more than just the expected outcomes). The code was written in a structured manner
+and well documented with comments. Proper use of version control was also shown through 
+git, and uploaded on the GitLab platform.
+
+There were a few challenges related to time management, and with respect to that
+the report writing could have been definitely improved if more time were allocated
+to iterating through the drafts. In retrospect, the implementation of the
+graphics library could have definitely been improved if the issues with QEMU
+floating point instructions were resolved, which wasn't possible partly due to 
+less than ideal time management.
 
 \section{Personal reflection and lessons learned}
+This project was definitely a very challenging undertaking. Initial project progress
+was difficult as documentation for VGA hardware is sparse, especially since it is 
+considered legacy technology. QEMU's board and VGA card emulation also has no 
+format documentation, which resulted in some hours spent looking through QEMU's
+source code to find things such as addresses and PCI device IDs.
+
+After the initial hurdle of initiating communication with the emulated card and
+being able to display something on screen, development became easier. This experience
+also made me realise the importance of documentation and maintainable software. Luckily
+the QEMU software is well written so it wasn't too difficult to find what I needed in its
+source code. I had prior experience reading through third party source and technical
+documentation, and this project challenged those skills.
+
+Overall however, I am happy with what was achieved and I believe the outcomes were
+more than satisfactory in consideration to the initial objectives of this project.
+At the start of this project I had no idea of the intricacies of low level communication
+with graphics hardware, and I managed to develop a fully working graphics implementation
+with a user API from scratch.
 
 \section{Legal, social, ethical and professional issues}
 
@@ -44,6 +71,7 @@ There are no professional issues associated with the project as I am the sole co
     \item Xv6 RISC-V OS
     \item QEMU
     \item GNU Compiler Toolchain for RISC-V
+    \item Docker
 \end{itemize}
 
 
@@ -512,5 +540,151 @@ index 5c787e34826f633b249b63ab338043ea69d64269..2813e432c4dff7703ad5c7203f4cbebb
  entry("sbrk");
 \end{minted}
 \captionof{listing}{Diff at commit da05fd8d to add the setpriority() system call}
+
+\section{High framerate game program code}
+\label{appendix:c:9}
+\begin{minted}{c}
+const int gunsprite_width = 6;
+const int gunsprite_height = 8;
+const uint8 gunsprite[] =
+{
+    0x00, 0x00, 0x0B, 0x0B, 0x00, 0x00,
+    0x00, 0x00, 0x0C, 0x0C, 0x00, 0x00,
+    0x00, 0x0C, 0x0C, 0x0C, 0x0C, 0x00,
+    0x00, 0x0C, 0x0C, 0x0C, 0x0C, 0x00,
+    0x00, 0x0C, 0x0C, 0x0C, 0x0C, 0x00,
+    0x00, 0x0C, 0x0C, 0x0C, 0x0C, 0x00,
+    0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
+    0x0C, 0x0C, 0x0C, 0x0C, 0x0C, 0x0C,
+};
+
+struct coords {
+    uint x;
+    uint y;
+};
+
+static void fire(int bulletx, int bullety, struct coords *bullets)
+{
+    for (int i = 0; i < 10; ++i)
+        if (bullets[i].x == -1 && bullets[i].y == -1)
+        {
+            bullets[i].x = bulletx, bullets[i].y = bullety;
+            break;
+        }
+}
+
+static int colliding(struct coords c1, struct coords c2, int combinedrad)
+{
+    uint rsquared = combinedrad * combinedrad;
+    uint dx = c1.x - c2.x;
+    uint dy = c1.y - c2.y;
+    uint distsquared = dx * dx + dy * dy;
+    if (distsquared <= rsquared)
+        return 1;
+    return 0;
+}
+
+int main(int argc, char *argv[])
+{
+    setpriority(1);
+
+    // open the first available window
+    window_handle win = window_create();
+
+    struct windowevent evt;
+    struct window_dim dim = window_getdimensions(win);
+
+    int gunx = dim.width / 2;
+    int guny = (dim.height / 4) * 3;
+
+    const uint bulletrad = 3;
+    struct coords bullets[10];
+
+    const uint enemywh = 5;
+    struct coords enemies[10];
+
+    for(int i = 0; i < 10; ++i)
+    {
+        bullets[i].x = -1;
+        bullets[i].y = -1;
+
+        int row = i / 5 + 1;
+        enemies[i].x = ((i % 5) + row) * (dim.width / 6);
+        enemies[i].y = row * (dim.height / 4);
+    }
+    
+    uint score = 0;
+    while (score < 10)
+    {
+        // clear screen
+        window_clearscreen(win);
+
+        // handle inputs
+        if (window_pollevent(win, &evt, 1) == 1)
+        {
+            switch (evt.payload)
+            {
+            case 'a':
+                gunx = gunx > 0 ? gunx - 1 : gunx;
+                break;
+            case 'd':
+                gunx = gunx < dim.width ? gunx + 1 : gunx;
+                break;
+            case ' ':
+                fire(gunx + gunsprite_width, guny - 2, bullets);
+                break;
+            default:
+                break;
+            }
+        }
+
+        // movement
+        for(int i = 0; i < 10; ++i)
+        {
+            // bullets, delete when top of screen reached
+            if (bullets[i].x != -1 && bullets[i].y != -1)
+                if (--bullets[i].y <= 0)
+                    bullets[i].x = -1, bullets[i].y = -1;
+
+
+        }
+
+        // collisions
+        for(int bullet = 0; bullet < 10; ++bullet)
+            if (bullets[bullet].x != -1 && bullets[bullet].y != -1)
+                for (int enemy = 0; enemy < 10; ++enemy)
+                    if (enemies[enemy].x != -1 && enemies[enemy].y != -1 && colliding(bullets[bullet], enemies[enemy], bulletrad + enemywh / 2))
+                    {
+                        score++;
+                        bullets[bullet].x = -1, bullets[bullet].y = -1;
+                        enemies[enemy].x = -1, enemies[enemy].y = -1;
+                        break;
+                    }
+
+        // draw
+        window_drawsprite(win, gunx, guny, gunsprite_width, gunsprite_height, gunsprite);
+        for(int i = 0; i < 10; ++i)
+        {
+            if (bullets[i].x != -1 && bullets[i].y != -1)
+                window_drawcircle(win, bullets[i].x - bulletrad, bullets[i].y - bulletrad, bulletrad, 0x0C);
+            
+            if (enemies[i].x != -1 && enemies[i].y != -1)
+                window_drawrect(win, enemies[i].x - enemywh, enemies[i].y - enemywh, enemywh, enemywh, 0x0E);
+        }
+
+        window_drawchar(win, 8*0, 0, 'S', 0x09);
+        window_drawchar(win, 8*1, 0, 'C', 0x09);
+        window_drawchar(win, 8*2, 0, 'O', 0x09);
+        window_drawchar(win, 8*3, 0, 'R', 0x09);
+        window_drawchar(win, 8*4, 0, 'E', 0x09);
+        window_drawchar(win, 8*5, 0, ':', 0x09);
+        window_drawchar(win, 8*6, 0, ' ', 0x09);
+        window_drawchar(win, 8*7, 0, (char)score + 48, 0x09);
+    }
+    window_destroy(win);
+    exit(0);
+}
+\end{minted}
+\captionof{listing}{user/game.c source code}
 
 \end{appendices}
