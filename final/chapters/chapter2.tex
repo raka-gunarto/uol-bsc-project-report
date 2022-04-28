@@ -76,7 +76,8 @@ of the solution will communicate and interact with each other. In short, the PCI
 discovery code will find the VGA card and configure the base addresses, then signal
 the driver when the VGA device is ready. 
 
-The VGA driver will provide an interface to the framebuffer and some modesetting code, through the port IO and memory IO which
+The VGA driver will provide an interface to the framebuffer and some modesetting code 
+through the port IO and memory IO which
 have address mappings in the virtual address space. The window manager will then use
 the framebuffer exposed by the driver to process user code that draws to the screen,
 and register UART interrupts as input events to be passed back to user code.
@@ -129,7 +130,7 @@ As shown in figure \ref{figure:1}, the PCI configuration space is a table of PCI
 where the first 32 bits contain the vendor and device IDs. As documented in the QEMU source tree under
 /docs/specs/standard-vga.txt \cite{qemusource}, the ID for the emulated VGA card is 0x11111234.
 
-A simple bruteforce scan through the configuration space, through all 256 PCI buses with 32 devices
+With a simple bruteforce scan through the configuration space, through all 256 PCI buses with 32 devices
 per bus, we can compare the first 32 bits of the header with 0x11111234 (see Appendix \ref{appendix:c:3}).
 
 \subsubsection{VGA configuration}
@@ -141,7 +142,7 @@ Once the device has been found, we need to write data into the configuration hea
 \end{itemize}
 This can be achieved by the following code snippet, given that `header' is an unsigned 32 bit
 pointer to memory.
-\begin{minted}{c}
+\begin{minted}[breaklines]{c}
   //-- set bits in the command register
   // Bit 0 - respond to I/O accesses
   // Bit 1 - respond the memory accesses
@@ -170,7 +171,7 @@ mentioned earlier. The read function is also identical, but instead of writing t
 that the order of reads and writes are very important here, so we use \mintinline{c}{__sync_synchrnize()}
 to emit a memory fence instruction so the compiler and the CPU do not attempt to change the order
 of accesses. The \mintinline{c}{__attibute__((unused))} modifier also informs the compiler that
-it should not optimise away that variable even though it seems unused, as we need it to perform
+it should not optimise that variable away even though it seems unused, as we need it to perform
 a read operation on port 0x3DA to set port 0x3C0 into index mode.
 
 \begin{listing}[H]
@@ -225,14 +226,14 @@ type array, storing each component in 8 bits (one byte), using only the first 6 
 Writing to the DAC is done in sets of 3, where each component is fed into the DAC data register
 sequentially (see listing \ref{listing:palette}).
 
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=8cm]{1024px-VGA_palette_with_black_borders.png}
     \caption{VGA 256 colour palette}
     \label{figure:vgacolor}
 \end{figure}
-\begin{listing}
-    \begin{minted}{c}
+\begin{listing}[H]
+    \begin{minted}[breaklines]{c}
     pwrite(0x3c8, 0xff, 0x00); // set DAC colour register mode to write
     for (int i = 0; i < 256; i++)
     {
@@ -266,19 +267,19 @@ for read/write operations.
 Device files are special files that have a major and minor number. For our case,
 the major number will indicate that its a `WINDOW' device file with major number 2, with 
 the minor number specifying which window the file is referring to. There already
-exists another type of device file `CONSOLE' in xv6 with major number 1; this file serves as an
+exists another type of device file `CONSOLE' in Xv6 with major number 1; this file serves as an
 abstraction to reading and writing from the UART console. Similarly for the
 window manager, the new device file will be an abstraction for drawing to a window
 and reading the window's input events. Using this design pattern saves us from having
-to add more system calls to xv6 as well.
+to add more system calls to Xv6 as well.
 
-\begin{figure}
+\begin{figure}[H]
     \centering
     \includegraphics[width=5cm]{fio.drawio.png}
     \caption{Filesystem reads/writes to device files}
 \end{figure}
 
-Registering the function handlers to `devsw' is very simple, the addresses for
+Registering the function handlers to `devsw' is very simple: the addresses for
 the read and write handlers are set on
 \mintinline{c}{devsw[MAJOR].read} and 
 \mintinline{c}{devsw[MAJOR].write} respectively.
@@ -388,7 +389,7 @@ The rationale behind having a data structure and a queue is to support other
 types of events in the future from other human interface devices, such as a mouse.
 Furthermore, the queue will be implemented as a circular queue, to be more space
 efficient and reducing the need to shift memory around as events are queued / dequeued.
-Since the kernel also doesn not have a dynamic memory allocator, the size of the event
+Since the kernel also does not have a dynamic memory allocator, the size of the event
 queue for each window will also be fixed.
 
 \subsubsection{Device read and write functions}
@@ -476,7 +477,7 @@ This structure takes inspiration from the `CreateWindow()' and `DestroyWindow()'
 Windows API pattern \cite{windowsapi:window}.
 
 \subsubsection{Event polling}
-Our window manager makes event polling very simple, just perform a read syscall
+Our window manager makes event polling very simple: just perform a read syscall
 with the window device file descriptor with the desired maximum events to read.
 However since the provided window handle is an opaque type, the library will provide
 a \mintinline{c}{window_pollevent()} with a function signature identical to the read syscall,
@@ -535,7 +536,7 @@ Note that this implementation is potentially slow since worst case it may result
 The ability to draw shape primitives is essential to creating a basic graphical interface.
 We will implement functionality to draw rectangles, circles and lines.
 
-Drawing rectangles is simple, we simply use seek to draw the rectangle
+Drawing rectangles is simple: we simply use \mintinline{c}{seek()} to draw the rectangle
 row by row, ensuring we don't overflow the current row.
 
 \begin{minted}{c}

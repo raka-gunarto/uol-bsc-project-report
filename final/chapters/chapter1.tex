@@ -10,7 +10,7 @@
 \section{Introduction}
 \label{chapter1:introduction}
 
-Operating systems (OSes) are specialised, low level software that manages a computer's
+Operating systems (OSes) are specialised, low level software that manage a computer's
 resources and provides a common interface for programs. The most common operating
 systems used by most consumers today include MacOS and Windows. Xv6 is an operating
 system written by MIT for the purposes of teaching, which runs on the RISC-V architecture \cite{xv6:book}\cite{xv6:code}.
@@ -130,8 +130,8 @@ display server that communicates with the kernel through display drivers.
 \subsubsection{Our implementation}
 We'll be taking inspiration from both implementations of windowing systems. For simplicity,
 since Xv6 does not have any mouse implementations, a grid window system is a good alternative
-that can use hotkeys for window switching. The window manager will sit in the kernel but only
-providing very basic functionality such as window allocation, input event queuing, and copying
+that can use hotkeys for window switching. The window manager will sit in the kernel providing 
+very basic functionality such as window allocation, input event queuing, and copying
 user data on the framebuffer (with bounds checking). This will reduce the attack surface
 on the kernel by having the rendering done in unprivileged user mode.
 
@@ -147,7 +147,7 @@ development container with all the required tools (see Appendix \ref{appendix:c:
 \subsubsection{Debugging with GDB}
 As QEMU provides a serial GDB port to debug the kernel, we will be using GDB to attach to QEMU
 to inspect the kernel. GDB can be used to read the debugging symbols, which greatly eases debugging
-allowing us to step through the kernel line by line and set breakpoints at desired lines.
+by allowing us to step through the kernel line by line and set breakpoints at desired lines.
 GDB can show the contents of variables during program execution with their original
 names. QEMU also supports interrupting the kernel via GDB to stop at its current instruction
 and enter step-through debugging, which will be an invaluable tool for infinite loops or deadlocks

@@ -84,7 +84,7 @@ There are no professional issues associated with the project as I am the sole co
 \section{Project development environment}
 \label{appendix:c:1}
 \begin{listing}[H]
-    \begin{minted}{docker}
+    \begin{minted}[breaklines]{docker}
 # Download base image ubuntu 20.04
 FROM ubuntu:20.04
 
@@ -107,8 +107,7 @@ RUN apt-get -y install wget git build-essential gdb-multiarch qemu-system-misc g
 \section{Xv6 memory layout}
 \label{appendix:c:2}
 \begin{listing}[H]
-\begin{minted}{c}
-// https://github.com/qemu/qemu/blob/e750c10167fa8ad3fcc98236a474c46e52e7c18c/hw/riscv/virt.c#L59
+\begin{minted}[]{c}
 // in qemu riscv "virt" machine, the address space
 // for PCI MMIO (memory mapped IO) addresses are
 // 0x40000000 - 0x80000000
@@ -119,13 +118,11 @@ RUN apt-get -y install wget git build-essential gdb-multiarch qemu-system-misc g
 #define VGA_FRAMEBUFFER_BASE 0x40000000L
 #define VGA_FRAMEBUFFER_SIZE 0x1000000L
 
-// https://github.com/qemu/qemu/blob/e750c10167fa8ad3fcc98236a474c46e52e7c18c/hw/riscv/virt.c#L58
 // in qemu riscv "virt" machine, the configuration space
 // starts at 0x30000000 and is 0x10000000 bytes long
 #define PCI_ECAM_BASE 0x30000000L
 #define PCI_ECAM_LEN 0x10000000L
 
-// https://github.com/qemu/qemu/blob/e750c10167fa8ad3fcc98236a474c46e52e7c18c/hw/riscv/virt.c#L52
 // in qemu riscv "virt" machine, the port I/O
 // address space starts at 0x3000000 and is 0x10000 long
 #define PCI_PIO_BASE 0x3000000L
@@ -137,7 +134,7 @@ RUN apt-get -y install wget git build-essential gdb-multiarch qemu-system-misc g
 \section{PCI device discovery}
 \label{appendix:c:3}
 \begin{listing}[H]
-    \begin{minted}{c}
+    \begin{minted}[breaklines]{c}
 void pciinit(void)
 {
   uint16 bus; // bus index
@@ -307,7 +304,7 @@ static const char BOOTIMG[] = {
     \caption{kernel/vga.c, displaying the bootimage per CPU}
 \end{listing}
 
-\section{Window switching code}
+\section{Window switching code snippet}
 \label{appendix:c:6}
 \begin{listing}[H]
   \begin{minted}{c}
